@@ -1,9 +1,11 @@
 package controllers;
 
-import communication.UDPChatCommunicator;
 import java.net.URL;
 import java.util.ResourceBundle;
 
+import factories.FactoryManager;
+import interfaces.ICommunicationProtocol;
+import interfaces.ICommunicationProtocolFactory;
 import javafx.application.Platform;
 import javafx.beans.value.ObservableValue;
 import javafx.fxml.FXML;
@@ -14,13 +16,16 @@ import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Toggle;
 import javafx.scene.control.ToggleGroup;
+import observer.IObserver;
+import observer.ISubject;
 
 /**
  * FXML Controller class
  *
  * @author Martin Goblirsch
+ * @author olivergottberg
  */
-public class MainWindowController implements Initializable {
+public class MainWindowController implements Initializable, IObserver {
 
     @FXML
     public TextArea txtAreaChat;
@@ -30,13 +35,7 @@ public class MainWindowController implements Initializable {
     public TextField txtName;
     @FXML
     public ToggleGroup gg;
-
-    // ------------- Deluppgift A test:
-    // Change what line is commented to change communicator:
-
-    //private WebSocketCommunicator _communicator = new WebSocketCommunicator(this);
-    private UDPChatCommunicator _communicator = new UDPChatCommunicator(this);
-    // -------------
+    private ICommunicationProtocol _communicator;
 
     /**
      * Initializes the controller class.
@@ -46,8 +45,32 @@ public class MainWindowController implements Initializable {
      */
     @Override
     public void initialize(URL url, ResourceBundle rb) {
+        //Setting UDP as the default protocol
+        ICommunicationProtocolFactory factory = FactoryManager.getFactory("UDP", this);
+        setCommunicationProtocol(factory.createProtocol());
+
         _communicator.startListen();
         addRadioButtonListener();
+    }
+
+    /**
+     * Setting the communication protocol to be used
+     *
+     * @param communicator The type of communicator to use
+     */
+    private void setCommunicationProtocol(ICommunicationProtocol communicator) {
+        if (_communicator != null) {
+            try {
+                if (_communicator instanceof ISubject) {
+                    ((ISubject) _communicator).removeObserver(this);
+                }
+                _communicator.stopListen();
+            } catch (Exception e) {
+                error(e);
+            }
+        }
+        _communicator = communicator;
+        _communicator.startListen();
     }
 
     /**
@@ -80,8 +103,19 @@ public class MainWindowController implements Initializable {
         gg.selectedToggleProperty().addListener((ObservableValue<? extends Toggle> ov, Toggle t, Toggle t1) -> {
             RadioButton chk = (RadioButton) t1.getToggleGroup().getSelectedToggle(); // Cast object to radio button
             System.out.println("Selected Radio Button - " + chk.getText());
-            
+
+            handleRadioButtonChange(chk.getText());
         });
+    }
+
+    /**
+     * Update protocol on radio button change
+     *
+     * @param protocolType The type of protocol to create
+     */
+    private void handleRadioButtonChange (String protocolType) {
+        ICommunicationProtocolFactory factory = FactoryManager.getFactory(protocolType, this);
+        setCommunicationProtocol(factory.createProtocol());
     }
 
     @FXML
@@ -128,4 +162,21 @@ public class MainWindowController implements Initializable {
         });
     }
 
+    /**
+     * Update when a new message is received
+     * @param message The message received
+     */
+    @Override
+    public void update(String message) {
+        receiveMessage(message);
+    }
+
+    /**
+     * Call error method if an error is received
+     * @param e The error received
+     */
+    @Override
+    public void receiveError(Exception e) {
+        error(e);
+    }
 }

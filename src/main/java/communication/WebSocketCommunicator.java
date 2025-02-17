@@ -1,24 +1,30 @@
 package communication;
 
-import controllers.MainWindowController;
+import interfaces.ICommunicationProtocol;
 import io.socket.client.IO;
 import io.socket.client.Socket;
+import observer.IObserver;
+import observer.ISubject;
+
 import java.net.URISyntaxException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The communicator handles the network traffic between all chat clients.
  * Messages are sent and received via the WebSocket.
  * 
  * @author Martin Goblirsch
+ * @author olivergottberg
  */
-public class WebSocketCommunicator {
+public class WebSocketCommunicator implements ICommunicationProtocol, ISubject {
 
     private final String WEB_SOCKET_ADDRESS = "https://work-58y8.onrender.com/";
     private Socket IOSocket;
-    private MainWindowController _chat = null;
+    private List<IObserver> observers = new ArrayList<>();
 
-    public WebSocketCommunicator(MainWindowController chat) {
-        this._chat = chat;
+    public WebSocketCommunicator() {
+
     }
 
     /**
@@ -44,7 +50,7 @@ public class WebSocketCommunicator {
         try {
             this.listenForMessages();
         } catch (Exception e) {
-            _chat.error(e);
+            sendObserverErrorMessage(e);
         }
     }
     
@@ -61,7 +67,8 @@ public class WebSocketCommunicator {
             IOSocket = IO.socket(WEB_SOCKET_ADDRESS);
 
             IOSocket.on("message", (final Object... args) -> {
-                _chat.receiveMessage(args[0].toString());
+                String receivedMessage = args[0].toString();
+                notifyObservers(receivedMessage);
             });
             IOSocket.connect();
 
@@ -70,4 +77,43 @@ public class WebSocketCommunicator {
         }
     }
 
+    /**
+     * Add new observer to the list
+     * @param observer Observer to be added
+     */
+    @Override
+    public void addObserver(IObserver observer) {
+        observers.add(observer);
+    }
+
+    /**
+     * Remove observer from the list
+     * @param observer Observer to be removed
+     */
+    @Override
+    public void removeObserver(IObserver observer) {
+        observers.remove(observer);
+    }
+
+    /**
+     * Update observers with new messages
+     * @param message The message to transmit
+     */
+    @Override
+    public void notifyObservers(String message) {
+        for (IObserver observer : observers) {
+            observer.update(message);
+        }
+    }
+
+    /**
+     * Update observers with error
+     * @param e The error to transmit
+     */
+    @Override
+    public void sendObserverErrorMessage (Exception e) {
+        for (IObserver observer : observers) {
+            observer.receiveError(e);
+        }
+    }
 }
